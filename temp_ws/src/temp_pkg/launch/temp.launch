@@ -1,0 +1,9 @@
+<launch>
+  <include file="$(find rplidar_ros)/launch/rplidar.launch"/>
+  <node pkg="tf" type="static_transform_publisher" name="base_to_laser_broadcaster" args="0 0 0 0 0 0 base_link laser 100"/>
+  <node pkg="laser_scan_matcher" type="laser_scan_matcher_node" name="laser_scan_matcher" output="screen">
+  <param name="publish_pose_with_covariance_stamped" value="true"/>
+  <param name="fixed_frame" value="odom"/>
+  <node pkg="serial_example" type="serial_example_node" name="ros_stm32_trans"/>
+  </node>
+</launch>
