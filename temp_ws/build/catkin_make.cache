@@ -1,0 +1,2 @@
+serial_example
+-DCATKIN_DEVEL_PREFIX=/home/nano/temp_ws/devel -DCMAKE_INSTALL_PREFIX=/home/nano/temp_ws/install -DCATKIN_WHITELIST_PACKAGES=serial_example -G Unix Makefiles

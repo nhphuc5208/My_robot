@@ -1,0 +1,5 @@
+<launch>
+  <include file="$(find rplidar_ros)/launch/rplidar.launch"/>
+  <node pkg="serial_example" type="serial_example_node" name="ros_to_stm" output="screen"/>
+  <!--<node pkg="teleop_twist_keyboard" type="teleop_twist_keyboard.py" name="teleop_twist_keyboard" output="screen"/>-->
+</launch>
