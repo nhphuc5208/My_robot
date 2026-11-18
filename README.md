@@ -119,6 +119,21 @@ Given a goal in RViz, the robot plans a global path (A*) on the inflated costmap
   <img src="docs/images/navigation.jpg" width="900" alt="Global path on the costmap and the robot driving to the goal">
 </p>
 
+### Related work: the same ROS pipeline in a larger room
+
+> The RViz screenshots in this subsection are **not from my robot**. They are taken from the 2022 HCMUT thesis *"Autonomous Indoor Mobile Robot using LiDAR and IMU Sensors"* by **Nguyễn Dỉ Khang** (supervisor: MSc. Trần Hoàng Khôi Nguyên), which uses the same hector_mapping → AMCL → move_base pipeline on a different robot in room 207B3. They are shown here for comparison only.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/related/rviz-mapping.jpg" width="420" alt="hector_mapping building the map of room 207B3"><br><sub>Mapping with hector_mapping</sub></td>
+    <td align="center"><img src="docs/images/related/rviz-localization.jpg" width="420" alt="AMCL particles converging in room 207B3"><br><sub>AMCL particles converging</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/images/related/rviz-navigation.jpg" width="640" alt="move_base planning and driving to the goal on the inflated costmap"><br><sub>move_base: global path on the inflated costmap and driving to the goal</sub></td>
+  </tr>
+</table>
+<sub>Images © Nguyễn Dỉ Khang, 2022 thesis, Ho Chi Minh City University of Technology.</sub>
+
 ### Limitations and next steps
 
 - Localization becomes unstable when the robot moves or turns fast, and in very symmetric rooms with few features.
