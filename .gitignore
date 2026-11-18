@@ -4,7 +4,7 @@ ros_ws/devel/
 ros_ws/install/
 
 # Keil / STM32 build output
-firmware/**/MDK-ARM/*/
+firmware/**/MDK-ARM/TestEnc/
 firmware/**/MDK-ARM/*.uvguix.*
 firmware/**/Drivers/
 *.o

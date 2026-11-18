@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2023 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -21,14 +21,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <string.h>
-#include <math.h>
-#include <stdio.h>
+#include "string.h"
+#include "math.h"
+#include "stdio.h"
 #include <stdlib.h>
-#include "flash.h"
-#include "mpu.h"
-#include "uart.h"
-#include "PID.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -38,6 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,61 +43,50 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-I2C_HandleTypeDef hi2c1;
-
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim5;
 
-UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
-DMA_HandleTypeDef hdma_usart2_rx;
 DMA_HandleTypeDef hdma_usart6_rx;
-DMA_HandleTypeDef hdma_usart6_tx;
 
 /* USER CODE BEGIN PV */
-char Data_Factor[256];
-char Receivedata[buffer] = {0}, Transmitdata[buffer] = {0};
-char stmros[17] = {0}, rosstm[15] = {0};
+volatile short xungencR, xungencL;
+
+int time_send = 0;
+char stmros[12]	={0}, rosstm[10] = {0};
 char *TXdata;
-data_mpu mpu_cur;
-float calib_factor[24];
-float accel_x_c, accel_y_c, accel_z_c, magn_x_c, magn_y_c, magn_z_c, magn_norm, accel_norm;
-double  roll, pitch, yaw, roll_dec, pitch_dec, yaw_dec, yaw_m, Mx, My;
-int time_tik = 0;
-pidUint motor_left , motor_right;
-volatile short xungencR;
-volatile short xungencL;
-volatile short vong1pR;
-volatile short vong1pL;
+float speedR, speedL, motor_left_set, motor_right_set,
+			ekR, ek1R, ek2R, ukR, uk1R, 
+			ekL, ek1L, ek2L, ukL, uk1L, setp;
+float kp=5, ki=350, kd=0.01, T=0.01;
 union sendData
 {
 	float d;
 	unsigned char data[4];
-}leftVelNow, rightVelNow, angleNow;
+}leftVelNow, rightVelNow;
 union receiveData
 {
 	float d;
 	unsigned char data[4];
 
 }leftVelSet, rightVelSet;
-int time_send = 0;
+uint8_t rx_buffer[4];
+volatile uint8_t rx_index = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
-static void MX_I2C1_Init(void);
-static void MX_TIM2_Init(void);
-static void MX_TIM3_Init(void);
-static void MX_TIM4_Init(void);
 static void MX_TIM5_Init(void);
-static void MX_USART2_UART_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_TIM4_Init(void);
 static void MX_USART6_UART_Init(void);
 /* USER CODE BEGIN PFP */
-void data_tok(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -137,32 +123,25 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_I2C1_Init();
-  MX_TIM2_Init();
-  MX_TIM3_Init();
-  MX_TIM4_Init();
   MX_TIM5_Init();
-  MX_USART2_UART_Init();
+  MX_TIM3_Init();
+  MX_TIM2_Init();
+  MX_TIM4_Init();
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
 	HAL_TIM_Base_Start_IT(&htim5);
-	HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_1 | TIM_CHANNEL_2); //Encoder
-	HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_1 | TIM_CHANNEL_2); //Encoder
-	
-	mpu_10dof_config();
-	read_flash(Data_Factor, sizeof(Data_Factor));
-  data_tok();
-	reset_out_pwm(&motor_left);
-	reset_out_pwm(&motor_right);
-	Pid_Init_Left(&motor_left);
-  Pid_Init_Right(&motor_right);
-	
+	HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_1 | TIM_CHANNEL_2);
+	HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_1 | TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_4);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {	
+                                 while (1)
+  {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -213,40 +192,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-}
-
-/**
-  * @brief I2C1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_I2C1_Init(void)
-{
-
-  /* USER CODE BEGIN I2C1_Init 0 */
-
-  /* USER CODE END I2C1_Init 0 */
-
-  /* USER CODE BEGIN I2C1_Init 1 */
-
-  /* USER CODE END I2C1_Init 1 */
-  hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 100000;
-  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 0;
-  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c1.Init.OwnAddress2 = 0;
-  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN I2C1_Init 2 */
-
-  /* USER CODE END I2C1_Init 2 */
-
 }
 
 /**
@@ -454,39 +399,6 @@ static void MX_TIM5_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART2_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART2_Init 0 */
-
-  /* USER CODE END USART2_Init 0 */
-
-  /* USER CODE BEGIN USART2_Init 1 */
-
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART2_Init 2 */
-
-  /* USER CODE END USART2_Init 2 */
-
-}
-
-/**
   * @brief USART6 Initialization Function
   * @param None
   * @retval None
@@ -526,19 +438,12 @@ static void MX_DMA_Init(void)
 {
 
   /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
   __HAL_RCC_DMA2_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
   /* DMA2_Stream1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
-  /* DMA2_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream6_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream6_IRQn);
 
 }
 
@@ -569,16 +474,94 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	if(htim->Instance==htim5.Instance)
 	{
 		
-		mpu_cur = mpu6050_read_sensors();
-		xungencL = __HAL_TIM_GET_COUNTER(&htim2);
-		__HAL_TIM_GET_COUNTER(&htim2) = 0;
-		motor_left.speed[0] = (float)xungencL*100*60/1920;
 		xungencR = __HAL_TIM_GET_COUNTER(&htim3);
-		motor_right.speed[0] = (float)xungencR*100*60/1920;
 		__HAL_TIM_GET_COUNTER(&htim3) = 0;
-	}
+		speedR = (float)xungencR*100*60/1920;
+	
+		ekR = motor_right_set - speedR;
+		ukR = uk1R+kp*(ekR-ek1R)+(ki*T/2)*(ekR+ek1R)+kd/T*(ekR-2*ek1R+ek2R);
+		ek2R = ek1R;
+		ek1R=ekR;
+		uk1R=ukR;
+		if (ukR>999) ukR=999;
+			else if (ukR<-999) ukR =-999;
+		if (uk1R>999) uk1R=999;
+			else if (uk1R<-999) uk1R =-999;
+		if (motor_right_set>0) 
+		{__HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_3, ukR);
+		 __HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_4, 0);
+		}
+		else 
+		{__HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_3, 0);
+		 __HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_4, -ukR);
+		} 
+		
+		
+		xungencL	= __HAL_TIM_GET_COUNTER(&htim2);
+		__HAL_TIM_GET_COUNTER(&htim2) = 0;
+		speedL = (float)xungencL*100*60/1920;
+	 	
+		
+		ekL = motor_left_set - speedL;
+		ukL = uk1L+kp*(ekL-ek1L)+(ki*T/2)*(ekL+ek1L)+kd/T*(ekL-2*ek1L+ek2L);
+		ek2L = ek1L;
+		ek1L=ekL;
+		uk1L=ukL;
+		if (ukL>999) ukL=999;
+		else if (ukL<-999) ukL =-999;
+		if (uk1L>999) uk1L=999;
+		else if (uk1L<-999) uk1L =-999;
+		if (motor_left_set>0) 
+		{__HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_1, ukL);
+		 __HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_2, 0);
+		}
+		else 
+		{__HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_1, 0);
+		 __HAL_TIM_SetCompare(&htim4,TIM_CHANNEL_2, -ukL);
+		}
+		
+		leftVelNow.d = speedL;
+		rightVelNow.d = speedR;
+		
+		
+		stmros[0] = 0x24;
+		stmros[1] = 0x24;
+		
+		for(int i = 0; i < 4; i++)
+		{
+			stmros[i+2] = leftVelNow.data[i];         // buf[2] buf[3]  buf[4] buf[5]
+			stmros[i+6] = rightVelNow.data[i];        // buf[6] buf[7]  buf[8] buf[9]
+			
+		}
+		stmros[10] = 0x0D;
+		stmros[11] = 0x0A;
+		if (time_send < 5)
+		{
+		time_send++;
+		}
+		else
+		{
+		HAL_UART_Transmit(&huart6, (uint8_t *) stmros, sizeof(stmros),1000);
+		time_send = 0;
+		} 
+	
 
+		
+		HAL_UART_Receive_DMA(&huart6, (uint8_t *)rosstm, sizeof(rosstm));
+		if (rosstm[0] == 0x55 && rosstm[1] == 0xAA){
+			for (int k = 0 ; k < 4 ; k++)
+				 {
+				   leftVelSet.data[k] =rosstm[k+2];
+				   rightVelSet.data[k] =rosstm[k+6];
+				  }
+			motor_left_set = (float)leftVelSet.d;
+			motor_right_set = (float)rightVelSet.d;
+		}
+		
+	}
 }
+	
+	
 
 /* USER CODE END 4 */
 

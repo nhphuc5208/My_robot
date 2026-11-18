@@ -13,7 +13,7 @@ A differential-drive robot that **builds a 2D map** of a room with a LiDAR, **lo
 
 ## Highlights
 
-- **Embedded motor control (C, STM32F411)** — encoder reading in x4 mode (TIM2/TIM3), discrete PID speed control for both wheels in a 10 ms timer interrupt, PWM to two BTS7960 H-bridges, UART with DMA to the Jetson, calibration factors stored in on-chip flash.
+- **Embedded motor control (C, STM32F411)** — quadrature encoders on TIM2/TIM3, discrete PID speed control of both wheels in a 10 ms timer interrupt, 10 kHz PWM to two BTS7960 H-bridges, UART with DMA reception to the Jetson.
 - **Custom serial protocol** between the MCU and ROS (framed binary floats, see below).
 - **SLAM** with `hector_mapping`: maps measured against the real rooms with **1.2 – 2.1 cm average error**.
 - **Localization** with wheel odometry + laser scan matching fused by an EKF (`robot_localization`), then `amcl` (particle filter) on the saved map: **2 – 7 cm / 1 – 5° error**.
@@ -30,33 +30,45 @@ A differential-drive robot that **builds a 2D map** of a room with a LiDAR, **lo
                                                  ├─ laser_scan_matcher + robot_localization EKF + amcl  (localization)
                                                  ├─ move_base: global_planner (A*) + DWA  (navigation)
                                                  └─ serial bridge node
-                                                          ▲  wheel speeds (m/s)
-                                                    UART  │
-                                                          ▼  wheel speed setpoints (m/s)
+                                                          ▲  measured wheel speeds
+                                              UART 115200 │
+                                                          ▼  wheel speed setpoints
                                                STM32F411 Discovery (C, STM32CubeMX + Keil)
-                                                 ├─ TIM2 / TIM3: quadrature encoders (x4)
+                                                 ├─ TIM2 / TIM3: quadrature encoders
                                                  ├─ TIM5: 10 ms control interrupt → PID
-                                                 ├─ TIM4: PWM ──► 2 × BTS7960 ──► 2 × JGB37-545 DC motors
-                                                 └─ Flash: stored calibration factors
+                                                 ├─ TIM4: 10 kHz PWM ──► 2 × BTS7960 ──► 2 × JGB37-545 DC motors
+                                                 └─ USART6 (RX via DMA) ◄──► Jetson
 ```
 
 ### MCU ↔ ROS serial protocol
 
-Every 10 ms the STM32 sends the measured wheel speeds; ROS answers with the speed setpoints computed from the DWA planner's linear/angular velocity. Both frames have the same layout:
+Binary frames over UART (115200 baud), wheel speeds as 4-byte little-endian `float`s (rpm):
 
-| Byte(s) | 1 | 1 | 4 | 4 | 1 | 1 |
-|---|---|---|---|---|---|---|
-| **STM32 → ROS** | `$` | `$` | `vel_left` (float) | `vel_right` (float) | `\n` | `\r` |
-| **ROS → STM32** | `$` | `$` | `vel_left_setpoint` (float) | `vel_right_setpoint` (float) | `\n` | `\r` |
+| Direction | Header | Data | Tail | Size | Rate |
+|---|---|---|---|:---:|:---:|
+| **STM32 → ROS** (measured speeds) | `0x24 0x24` (`$$`) | `left` float, `right` float | `0x0D 0x0A` | 12 B | every 60 ms |
+| **ROS → STM32** (setpoints) | `0x55 0xAA` | `left_set` float, `right_set` float | — | 10 B | received by DMA |
 
-The two `$` bytes mark the start of a frame; any frame that does not start with them is discarded.
+The bridge node on the Jetson turns the DWA planner's linear/angular velocity (`/cmd_vel`) into left/right wheel setpoints. Frames whose header does not match are ignored, so a corrupted or shifted frame never drives the motors.
+
+### Firmware: PID speed control
+
+Every 10 ms (TIM5 interrupt) the STM32 reads and resets each encoder counter, converts the count to rpm, and runs an incremental (velocity-form) discrete PID with trapezoidal integration:
+
+```c
+e[k] = setpoint - speed;
+u[k] = u[k-1] + Kp*(e[k] - e[k-1]) + (Ki*T/2)*(e[k] + e[k-1]) + (Kd/T)*(e[k] - 2*e[k-1] + e[k-2]);
+// Kp = 5, Ki = 350, Kd = 0.01, T = 0.01 s; u clamped to ±999 (PWM duty), sign selects direction
+```
+
+Source: [`firmware/stm32f411_motor_controller/Core/Src/main.c`](firmware/stm32f411_motor_controller/Core/Src/main.c) (`HAL_TIM_PeriodElapsedCallback`).
 
 ## Hardware
 
 | Component | Part | Role |
 |---|---|---|
 | Embedded computer | NVIDIA Jetson Nano B1 (4 GB) | Runs ROS: mapping, localization, navigation |
-| Microcontroller | STM32F411 Discovery | Encoders, PID, PWM, UART |
+| Microcontroller | STM32F411 Discovery (100 MHz Cortex-M4) | Encoders, PID, PWM, UART |
 | LiDAR | Slamtec RPLiDAR A1 | 360°, 12 m range, 10 Hz, 8000 samples/s |
 | Motors | 2 × JGB37-545 DC geared motors with encoders, 85 mm wheels | Differential drive |
 | Motor drivers | 2 × BTS7960 (43 A H-bridge) | |
@@ -116,10 +128,10 @@ Given a goal in RViz, the robot plans a global path (A*) on the inflated costmap
 ## Repository structure
 
 ```
-├── firmware/stm32f411_motor_controller/   # STM32 firmware (STM32CubeMX project + Keil MDK)
-│   ├── Core/Src/main.c                    #   timers, encoders, 10 ms control interrupt
-│   ├── Core/Inc/PID.h, uart.h, flash.h    #   PID, UART framing and flash interfaces
-│   └── L1.ioc                             #   CubeMX configuration (pins, timers, DMA)
+├── firmware/stm32f411_motor_controller/   # STM32 firmware (STM32CubeMX + Keil MDK-ARM)
+│   ├── Core/Src/main.c                    #   encoders, PID, PWM and UART protocol (10 ms interrupt)
+│   ├── TestEnc.ioc                        #   CubeMX configuration (pins, timers, DMA, clocks)
+│   └── MDK-ARM/TestEnc.uvprojx            #   Keil project
 ├── ros_ws/src/
 │   ├── navstack_pub/                      # Navigation package
 │   │   ├── launch/navigation.launch       #   full stack: LiDAR + odometry + map + AMCL + move_base
@@ -131,7 +143,7 @@ Given a goal in RViz, the robot plans a global path (A*) on the inflated costmap
 └── docs/images/                           # Figures from the thesis
 ```
 
-> **Note on the firmware:** this is a development snapshot of the STM32 project. The PID, UART and flash helpers are declared in `Core/Inc/*.h`; their `.c` implementations and the STM32 HAL `Drivers/` folder are not included. Regenerate the HAL drivers with STM32CubeMX from `L1.ioc`.
+> **Building the firmware:** the STM32 HAL/CMSIS `Drivers/` folder is not committed. Open `TestEnc.ioc` in STM32CubeMX and click *Generate Code* to restore it, then build and flash `MDK-ARM/TestEnc.uvprojx` with Keil µVision.
 
 ## Running the ROS stack
 
