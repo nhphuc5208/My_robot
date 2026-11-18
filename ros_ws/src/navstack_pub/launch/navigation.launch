@@ -12,7 +12,7 @@
 
 <include file="$(find navstack_pub)/launch/ekf_odometry.launch"/>
 
-<arg name="map_file" default="/home/nano/ros_share/maps/map3.yaml"/>
+<arg name="map_file" default="$(find navstack_pub)/maps/map3.yaml"/>
 <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)" />
 
 <include file="$(find navstack_pub)/launch/amcl_diff.launch"/>

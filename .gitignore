@@ -1,0 +1,22 @@
+# catkin build output
+ros_ws/build/
+ros_ws/devel/
+ros_ws/install/
+
+# Keil / STM32 build output
+firmware/**/MDK-ARM/*/
+firmware/**/MDK-ARM/*.uvguix.*
+firmware/**/Drivers/
+*.o
+*.d
+*.crf
+*.axf
+*.hex
+*.map
+*.lst
+
+# Editors / OS
+*.swp
+.vscode/
+Thumbs.db
+.DS_Store
