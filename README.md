@@ -89,7 +89,7 @@ Step response of the right wheel under a ~5 kg load (setpoint 0.1 → 0.7 m/s in
   <img src="docs/images/pid-response.png" width="760" alt="PID step response and error of the right wheel">
 </p>
 
-> The mapping, localization and navigation experiments below were run in 2022 on the earlier **LiDAR + IMU version** of the robot, in rooms 207B3 and 205B3.
+> The mapping, localization and navigation experiments below were run in 2022 on the earlier **LiDAR version** of the robot, in rooms 207B3 and 205B3.
 
 ### Mapping (hector_mapping)
 
@@ -106,7 +106,7 @@ The robot is driven around with `teleop_twist_keyboard` while `hector_mapping` b
 
 ### Localization (AMCL)
 
-Particles start spread around the initial pose and converge after the robot moves 3 – 5 m. Measured at 10 positions in room 207B3: **X/Y error 1 – 7 cm, heading error 1 – 5°**. Accuracy drops very close to walls, far from features, and near steel objects that disturb the IMU.
+Particles start spread around the initial pose and converge after the robot moves 3 – 5 m. Measured at 10 positions in room 207B3: **X/Y error 1 – 7 cm, heading error 1 – 5°**. Accuracy drops very close to walls and far from features.
 
 <p align="center">
   <img src="docs/images/rviz-localization.jpg" width="900" alt="AMCL particles converging in room 207B3 in RViz">
@@ -123,7 +123,7 @@ Given a goal in RViz, the robot plans a global path (A*) on the inflated costmap
 ### Limitations and next steps
 
 - Localization becomes unstable when the robot moves or turns fast, and in very symmetric rooms with few features.
-- Localization needs a feature-rich environment; steel objects disturb the IMU, so it must be recalibrated regularly.
+- Localization needs a feature-rich environment.
 - Next: add a camera to improve localization, and turn the platform into an indoor cleaning robot.
 
 ## Repository structure
